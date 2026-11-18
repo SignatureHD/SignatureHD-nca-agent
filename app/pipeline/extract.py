@@ -106,5 +106,7 @@ def extract(pdf_bytes, fixture=None):
                                             "data": base64.b64encode(pdf_bytes).decode()}},
             {"type": "text", "text": f"Extract this {kind} report into the record_report tool. Include every account, "
                                      "every enquiry and the full 24-month payment history for each account."}]}])
+    from .validate import _decode
+    data = _decode(data)
     data["report_type"] = kind
     return data

@@ -23,7 +23,57 @@ def _fix_text(t, warnings, where):
     return t2
 
 
+def _decode(v):
+    """Models sometimes return nested values as JSON strings; decode them."""
+    if isinstance(v, str) and v.strip()[:1] in "[{":
+        try:
+            return _decode(json.loads(v))
+        except ValueError:
+            return v
+    if isinstance(v, list):
+        return [_decode(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _decode(x) for k, x in v.items()}
+    return v
+
+
+def _as_list(v):
+    if v is None:
+        return []
+    return v if isinstance(v, list) else [v]
+
+
+def normalise(d):
+    """Coerce the draft into the shape the renderer expects, whatever small deviations the model made."""
+    d = _decode(d) if isinstance(d, dict) else {}
+    for sec in ("why", "fixes", "counsellor_notes"):
+        items = []
+        for it in _as_list(d.get(sec)):
+            if isinstance(it, str):
+                title, _, body = it.partition(": ")
+                it = {"title": title if body else "", "body": body or it}
+            if isinstance(it, dict):
+                items.append({"title": str(it.get("title") or ""), "body": str(it.get("body") or ""),
+                              "cites": [str(c) for c in _as_list(it.get("cites"))]})
+        d[sec] = items
+    disputes = []
+    for it in _as_list(d.get("disputes")):
+        if isinstance(it, str):
+            it = {"item": it, "why": "", "steps": []}
+        if isinstance(it, dict):
+            disputes.append({"item": str(it.get("item") or ""), "why": str(it.get("why") or ""),
+                             "steps": [str(x) for x in _as_list(it.get("steps"))],
+                             "cites": [str(c) for c in _as_list(it.get("cites"))]})
+    d["disputes"] = disputes
+    plan = d.get("plan") if isinstance(d.get("plan"), dict) else {}
+    d["plan"] = {k: [str(x) for x in _as_list(plan.get(k))] for k in ("d30", "d60", "d90")}
+    for k in ("summary", "rating_comment"):
+        d[k] = d.get(k) if isinstance(d.get(k), str) else ("" if d.get(k) is None else str(d.get(k)))
+    return d
+
+
 def validate(draft, report, sources):
+    draft = normalise(draft)
     warnings = []
     allowed = set(sources)
     known = _amounts_in(report)
