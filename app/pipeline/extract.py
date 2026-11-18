@@ -39,7 +39,7 @@ CONSUMER_SCHEMA = {
         "enquiries": {"type": "array", "items": {"type": "object", "properties": {
             "date": {"type": "string"}, "subscriber": {"type": "string"}, "type": {"type": "string"}, "industry": {"type": "string"},
             "own_account": {"type": "boolean", "description": "True if this is the requesting debt counsellor's own enquiry"}}}},
-        "extraction_doubts": {"type": "array", "items": {"type": "string"}, "description": "Anything unreadable, ambiguous or assumed"}}}
+        "extraction_doubts": {"type": "array", "items": {"type": "string"}, "description": "At most 6 items, one short sentence each: only things that could change the analysis (unreadable values, assumptions made)"}}}
 
 BUSINESS_SCHEMA = {
     "type": "object",
@@ -71,7 +71,7 @@ BUSINESS_SCHEMA = {
 SYSTEM = """You extract data from South African credit bureau reports for a registered debt counsellor.
 Copy values exactly as printed. Amounts are whole rands as integers. Dates are YYYY-MM-DD.
 Never output a full ID number or full account number: mask them as instructed.
-If a value is not in the report, leave it out. Do not guess. List anything uncertain in extraction_doubts."""
+If a value is not in the report, leave it out. Do not guess. List anything uncertain in extraction_doubts: at most 6 short sentences, only what could change the analysis."""
 
 
 def _client():

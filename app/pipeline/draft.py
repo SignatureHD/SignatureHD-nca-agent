@@ -21,7 +21,8 @@ SCHEMA = {"type": "object", "required": ["summary", "why", "disputes", "fixes", 
         "plan": {"type": "object", "required": ["d30", "d60", "d90"], "properties": {
             k: {"type": "array", "items": {"type": "string"}} for k in ("d30", "d60", "d90")}},
         "rating_comment": {"type": "string", "description": "One sentence explaining the rating"},
-        "counsellor_notes": {"type": "array", "items": _item}}}
+        "counsellor_notes": {"type": "array", "minItems": 2, "items": _item,
+                             "description": "One card per issue needing the counsellor's judgement. Group repeated flags of the same kind into one card"}}}
 
 SYSTEM = """You draft a Findings and Action Plan for a South African debt counselling client, plus internal notes for the registered debt counsellor who must approve it.
 
@@ -34,7 +35,8 @@ Hard rules:
 - Where a debt may have prescribed, tell the client not to pay or sign an acknowledgement until the counsellor has checked it.
 - Only list a dispute when the report gives a real basis. If a dispute depends on facts not in the report, say what must be confirmed first.
 - Internal-only flags (marked internal) go in counsellor_notes, never in client text.
-- Counsellor notes: precise, cite sections, list what to check and what documents to request.
+- Counsellor notes: one short card per issue that needs the counsellor's judgement (group repeated flags of the same kind, naming the accounts). Each card: a short title, then 2-4 sentences saying what to check, which section applies and what documents to request. Every RULES flag must be covered by a card.
+- Fill every section: 3-4 "why" items, every real dispute, 2-5 "fixes", all three plan periods, and the counsellor notes.
 - Never include a full ID or account number."""
 
 
@@ -60,12 +62,40 @@ def draft(report, rules):
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY or None)
     from .llm import call_tool
     out = call_tool(
-        client, model=config.CLAUDE_MODEL, max_tokens=8000,
+        client, model=config.CLAUDE_MODEL, max_tokens=16000,
         system=SYSTEM + "\nAlways answer by calling the write_findings tool.",
         tool={"name": "write_findings", "description": "Return the draft", "input_schema": SCHEMA},
         messages=[{"role": "user", "content":
                    f"REPORT_DATA:\n{json.dumps(report, default=str)}\n\nRULES:\n{json.dumps(rules, default=str)}\n\nSOURCES:\n{src_text}"}])
+    missing = _missing(out, rules)
+    if missing:
+        out = call_tool(
+            client, model=config.CLAUDE_MODEL, max_tokens=16000,
+            system=SYSTEM + "\nAlways answer by calling the write_findings tool.",
+            tool={"name": "write_findings", "description": "Return the draft", "input_schema": SCHEMA},
+            messages=[{"role": "user", "content":
+                       f"REPORT_DATA:\n{json.dumps(report, default=str)}\n\nRULES:\n{json.dumps(rules, default=str)}\n\nSOURCES:\n{src_text}"},
+                      {"role": "assistant", "content": "I will return the complete draft."},
+                      {"role": "user", "content": "Your previous draft was incomplete: " + "; ".join(missing)
+                       + ". Return the complete draft with every section filled."}])
     return out, sources
+
+
+def _missing(d, rules):
+    def n(k):
+        v = d.get(k) if isinstance(d, dict) else None
+        if isinstance(v, str):
+            try:
+                v = json.loads(v)
+            except ValueError:
+                return 0
+        return len(v) if isinstance(v, (list, dict)) else 0
+    out = []
+    if n("why") < 3: out.append("fewer than 3 'why' items")
+    if n("fixes") < 2: out.append("fewer than 2 'fixes'")
+    if n("plan") < 3: out.append("plan periods missing")
+    if rules.get("flags") and n("counsellor_notes") < 2: out.append("counsellor_notes missing although RULES has flags")
+    return out
 
 
 def _mock(report, rules, sources):

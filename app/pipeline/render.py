@@ -79,23 +79,61 @@ def client_pdf(report, rules, d, st):
     return HTML(string=html).write_pdf()
 
 
+FLAG_TITLES = {
+    "prescription_check": "Possible prescription",
+    "not_updated": "Accounts not updated",
+    "no_enquiry_for_new_account": "No matching enquiry for a new account",
+    "check_aka": "Name variations on the report",
+}
+
+
+def split_warnings(warnings):
+    """Validator checks the counsellor must act on, versus notes on how the PDF was read."""
+    checks = [w for w in warnings if not w.startswith("Extraction doubt:")]
+    doubts = [w.replace("Extraction doubt:", "").strip() for w in warnings if w.startswith("Extraction doubt:")]
+    return checks, doubts
+
+
+def _flag_cards(flags):
+    """Fallback when the draft has no counsellor notes: one card per flag type, accounts listed."""
+    groups = {}
+    for f in flags:
+        groups.setdefault(f["id"], []).append(f)
+    out = []
+    for fid, fs in groups.items():
+        title = FLAG_TITLES.get(fid, fid.replace("_", " ").capitalize())
+        body = " ".join(dict.fromkeys(x.get("detail", "") for x in fs))
+        cites = list(dict.fromkeys(c for x in fs for c in x.get("sources", [])))[:3]
+        out.append({"title": title, "body": body, "cites": cites})
+    return out
+
+
 def review_pdf(report, rules, d, warnings, sources, st):
     brand = st.get("brand_colour") or "#1f3a5f"
     name = subject_name(report)
-    footer = f"INTERNAL review sheet. {report.get('bureau', '')} report {report.get('ticket_number', '')}."
-    warn = ("<div class='warn'><b>Validator warnings</b><ul>" + "".join(f"<li>{e(w)}</li>" for w in warnings) + "</ul></div>") if warnings else \
-        "<div class='summary'><p>No validator warnings.</p></div>"
-    notes = "".join(f"<div class='card'><h4>{e(x['title'])}</h4><p>{e(x['body'])}</p>{_basis(x['cites'])}</div>" for x in d["counsellor_notes"])
-    flags = "".join(f"<li><b>{e(f['id'])}</b>: {e(f.get('detail'))}{' (internal)' if f.get('internal') else ''}</li>" for f in rules["flags"])
-    srcs = "".join(f"<li>{e(s)}: {e(corpus.label(s))}, {e(corpus.records()[s]['heading'])}</li>" for s in sources)
-    approved = st.get("rubric_approved_by") or "NOT YET APPROVED"
+    footer = f"INTERNAL review sheet. Based on {report.get('bureau', '')} report {report.get('ticket_number', '')}, dated {report.get('date_requested', '')}."
+    checks, doubts = split_warnings(warnings)
+    notes = d.get("counsellor_notes") or _flag_cards(rules.get("flags", []))
+    notes = list(notes) + [{"title": "Data handling", "cites": [], "body":
+        "ID and account numbers are masked in the client PDF. Keep this report under the client's POPIA consent, "
+        "and delete the working copies once the file is closed."}]
+    cards = "".join(f"<div class='card'><h4>{e(x['title'])}</h4><p>{e(x['body'])}</p>{_basis(x.get('cites'))}</div>" for x in notes)
+    check_html = ("<div class='warn'><b>Check before approving</b><ul>" + "".join(f"<li>{e(w)}</li>" for w in checks) + "</ul></div>") if checks else ""
+    doubt_html = ("<h4 style='margin-top:14px'>How the report was read</h4><p class='intro'>Points the reader was unsure about. "
+                  "Check them against the original report if they affect your advice.</p><ul class='small'>"
+                  + "".join(f"<li>{e(w[:400])}</li>" for w in doubts[:8]) + "</ul>") if doubts else ""
+    score = (report.get("scores") or {})
+    score_txt = ""
+    for k, v in score.items():
+        if isinstance(v, dict) and v.get("score"):
+            score_txt = f" · {e(k.replace('_', ' ').upper())} score {e(v['score'])}"
+            break
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{_css(footer, brand)}
-    ul.small li {{ font-size: 8.8pt; }}</style></head><body>
+    ul.small li {{ font-size: 8.6pt; margin-bottom: 3px; }}</style></head><body>
     <div class="draft">INTERNAL. Counsellor review sheet. Not for the client.</div>
     <div class="hero"><div class="kicker">Counsellor review notes</div><h1>{e(name)}</h1>
-    <div class="meta">{e(report.get('bureau'))} ticket {e(report.get('ticket_number'))} · Readiness {rules['total']}/100 ({rules['band']}) · Rubric {e(rules['rubric_version'])}, approved by: {e(approved)}</div></div>
-    {warn}{notes}
-    <h4 style="margin-top:12px">Automatic flags</h4><ul class="small">{flags}</ul>
-    <h4 style="margin-top:12px">Sources given to the drafting step</h4><ul class="small">{srcs}</ul>
+    <div class="meta">{e(report.get('bureau'))} ticket {e(report.get('ticket_number'))}{score_txt} · Readiness {rules['total']}/100 ({rules['band']})</div></div>
+    <p class="intro">These items were raised by the automatic checks and need a counsellor's judgement before the client PDF is approved.</p>
+    {cards}{check_html}{doubt_html}
     </body></html>"""
     return HTML(string=html).write_pdf()

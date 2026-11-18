@@ -109,8 +109,12 @@ async function openJob(id) {
   CURRENT = id; err("");
   const j = await api("/api/jobs/" + id); DRAFT = j.draft;
   const t = encodeURIComponent(TOKEN);
-  const warn = (j.warnings||[]).length ? `<div class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm mb-3"><b>Check before approving</b>
-      <ul class="list-disc ml-5 mt-1">${j.warnings.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></div>` : "";
+  const all = j.warnings||[], doubtP = "Extraction doubt:";
+  const checks = all.filter(w=>!w.startsWith(doubtP)), doubts = all.filter(w=>w.startsWith(doubtP)).map(w=>w.slice(doubtP.length).trim());
+  const warn = (checks.length ? `<div class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm mb-3"><b>Check before approving</b>
+      <ul class="list-disc ml-5 mt-1">${checks.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></div>` : "")
+    + (doubts.length ? `<details class="p-3 rounded-lg bg-slate-50 border border-slate-200 text-sm mb-3"><summary class="cursor-pointer"><b>How the report was read</b> (${doubts.length} notes)</summary>
+      <ul class="list-disc ml-5 mt-1">${doubts.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></details>` : "");
   const actions = j.status === "review" ? `
       <div class="flex gap-2"><button onclick="toggleEdit()" class="px-3 py-2 text-sm rounded-lg border border-slate-300 whitespace-nowrap">Edit wording</button>
       <button onclick="reject()" class="px-3 py-2 text-sm rounded-lg border border-red-300 text-red-700">Reject</button>
