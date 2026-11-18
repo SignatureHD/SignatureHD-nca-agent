@@ -14,15 +14,18 @@ Nothing reaches a client without a counsellor's approval.
 
 ---
 
-## Step 1: Deploy the engine (about 20 minutes)
+## Step 1: Deploy the engine (done 18 November 2026)
 
-1. Push this folder to a **private** GitHub repo.
-2. **Supabase:** create a project in the EU (Frankfurt) region. Copy the connection string from Project Settings > Database > Connection string > URI, using the pooler on port 6543. Change the start to `postgresql+psycopg://`.
-3. **Railway:** New Project > Deploy from GitHub repo > pick the repo. Railway builds from the `Dockerfile`.
-4. In Railway > Variables, add everything from `.env.example`.
-   - For `ACTION_KEY` and `SESSION_SECRET`, use two different long random strings (`openssl rand -hex 32`).
-   - Leave the three `GHL_` values blank for now.
-5. Railway > Settings > Networking > Generate Domain. Open `https://YOUR-DOMAIN/health` and check that it returns `{"ok":true,"mock":false}`. The tables are created on first start.
+- **Railway project:** `nca-agent`, region EU West (Amsterdam). It has two services:
+  - `engine`: built from this repo's `Dockerfile`, and redeploys on every push to `main`
+  - `Postgres`: Railway's own database. `DATABASE_URL` references it
+- **Public URL:** https://engine-production-92caedb9.up.railway.app (health check at `/health`)
+- **Variables already set:** `DATABASE_URL`, `ACTION_KEY`, `SESSION_SECRET`, `PORT`, `PUBLIC_BASE_URL`, `GHL_REDIRECT_URI`, `CLAUDE_MODEL`, `RETENTION_DAYS`, `MOCK=0`
+- **Still to add in Railway > engine > Variables:**
+  - `ANTHROPIC_API_KEY` (paste it yourself)
+  - `GHL_CLIENT_ID`, `GHL_CLIENT_SECRET` and `GHL_SHARED_SECRET`, after Step 2
+
+Copy `ACTION_KEY` from Railway's Variables tab when you set up the workflow action header in Step 2.
 
 ## Step 2: Create the Private Marketplace app
 
@@ -33,21 +36,20 @@ Nothing reaches a client without a counsellor's approval.
    - **Who can install:** Both Agency & Sub-account
    - **Listing type:** White-label, so your name shows, not HighLevel's
 3. **Advanced Settings > Auth**:
-   - **Redirect URL:** `https://YOUR-DOMAIN/oauth/callback`
+   - **Redirect URL:** `https://engine-production-92caedb9.up.railway.app/oauth/callback`
    - **Scopes** (the minimum this app needs): `contacts.readonly`, `contacts.write`, `conversations.readonly`, `conversations.write`, `conversations/message.write`, `medias.readonly`, `medias.write`, `locations.readonly`
    - **Client keys:** generate them, then copy the Client ID and Client Secret into Railway as `GHL_CLIENT_ID` and `GHL_CLIENT_SECRET`
    - **Shared Secret:** click Generate and copy it into Railway as `GHL_SHARED_SECRET`
-   - Set `GHL_REDIRECT_URI` in Railway to the same Redirect URL. Redeploy.
-4. **Webhooks:** set the default webhook URL to `https://YOUR-DOMAIN/ghl/webhook` and subscribe to **UninstallApp**. When a practice removes the app, its tokens and client data are deleted. The app double-checks with HighLevel first, so a fake uninstall call can't wipe anyone's data.
+4. **Webhooks:** set the default webhook URL to `https://engine-production-92caedb9.up.railway.app/ghl/webhook` and subscribe to **UninstallApp**. When a practice removes the app, its tokens and client data are deleted. The app double-checks with HighLevel first, so a fake uninstall call can't wipe anyone's data.
 5. **Custom Page** (Modules > Custom Pages):
-   - **URL:** `https://YOUR-DOMAIN/app`
+   - **URL:** `https://engine-production-92caedb9.up.railway.app/app`
    - **Placement:** left navigation
    - **Name:** Credit Report Agent
 
    The page identifies the user through HighLevel's signed user context, not the URL, so one practice can't open another's reports.
 6. **Workflow Action** (Modules > Workflow Actions > Create):
    - **Name:** Analyse credit report. **Key:** `analyse_credit_report`
-   - **Execution:** API, POST `https://YOUR-DOMAIN/ghl/action/analyse`
+   - **Execution:** API, POST `https://engine-production-92caedb9.up.railway.app/ghl/action/analyse`
    - **Header:** `X-Action-Key` = the same value as `ACTION_KEY` in Railway
    - **Field (optional):** Text, Reference `report_field_id`, label "Credit report field ID". Leave it blank and the app uses the latest PDF on the contact.
 
