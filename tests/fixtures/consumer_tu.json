@@ -1,0 +1,171 @@
+{
+  "report_type": "consumer",
+  "bureau": "TransUnion",
+  "ticket_number": "000000000000001",
+  "date_requested": "2026-10-08",
+  "requested_by": "Example Debt Counsellors",
+  "enquiry_reason": "Credit Report with Informed Consent",
+  "consumer": {
+    "name": "Test Consumer",
+    "id_masked": "800101 **** ***",
+    "date_of_birth": "1980-01-01",
+    "marital_status": "Single",
+    "dependants": 2,
+    "employer": "Example Manufacturing (Pty) Ltd",
+    "occupation": "Machine Operator",
+    "aka_names": [
+      {
+        "name": "TEST ALIAS ONE",
+        "date": "2010-09-15"
+      },
+      {
+        "name": "TEST ALIAS TWO",
+        "date": "2006-07-31"
+      }
+    ]
+  },
+  "fico6": {
+    "score": 623,
+    "reasons": [
+      "Serious delinquency or derogatory public records",
+      "Length of time revolve accounts established",
+      "Number of derogatory public records",
+      "Amount owed on accounts",
+      "Low number of recent hard enquiries",
+      "History of balances on accounts",
+      "Low frequency of delinquency",
+      "Recent revolving account usage"
+    ]
+  },
+  "adverse": {
+    "judgments": 0,
+    "defaults": 0,
+    "notices": 0,
+    "trace_alerts": 0
+  },
+  "accounts": [
+    {
+      "supplier": "Nedbank Personal Loans",
+      "type": "Personal loan",
+      "acc_last4": "1000",
+      "opened": "2018-09-19",
+      "opening_balance": 146584,
+      "current_balance": 271693,
+      "overdue": 271693,
+      "instalment": 4626,
+      "term_months": 60,
+      "history": {
+        "2024-11": "150+",
+        "2024-12": "150+",
+        "2025-01": "150+",
+        "2025-10": "150+",
+        "2026-05": "150+"
+      },
+      "latest_status": "150+",
+      "latest_status_month": "2026-05"
+    },
+    {
+      "supplier": "Nimble Group",
+      "type": "Revolving credit store card",
+      "industry": "Debt recovery",
+      "acc_last4": "1001",
+      "opened": "2018-09-20",
+      "history": {
+        "2024-11": "150+",
+        "2026-07": "B"
+      },
+      "latest_status": "B (Final closure)",
+      "latest_status_month": "2026-07"
+    },
+    {
+      "supplier": "Capitec Bank",
+      "type": "Personal loan",
+      "acc_last4": "1002",
+      "opened": "2026-04-24",
+      "opening_balance": 85000,
+      "current_balance": 80486,
+      "instalment": 2828,
+      "term_months": 48,
+      "latest_status": "0"
+    },
+    {
+      "supplier": "Capitec Bank Access Facility",
+      "type": "Revolving facility",
+      "acc_last4": "1003",
+      "opened": "2026-04-24",
+      "limit": 20000,
+      "current_balance": 20495,
+      "instalment": 892,
+      "latest_status": "0",
+      "revolving": true
+    },
+    {
+      "supplier": "Capitec Bank Credit Card",
+      "type": "Credit card",
+      "acc_last4": "1004",
+      "opened": "2026-04-24",
+      "limit": 18000,
+      "current_balance": 18365,
+      "instalment": 1265,
+      "latest_status": "0",
+      "revolving": true
+    },
+    {
+      "supplier": "OMF Personal Loans",
+      "type": "Personal loan",
+      "acc_last4": "1005",
+      "opened": "2026-09-25",
+      "opening_balance": 16207,
+      "current_balance": 16220,
+      "instalment": 1267,
+      "term_months": 18,
+      "latest_status": "NU"
+    },
+    {
+      "supplier": "NBC Finance RF",
+      "type": "Pension-backed housing loan",
+      "acc_last4": "1006",
+      "opened": "2014-08-06",
+      "opening_balance": 98041,
+      "current_balance": 60569,
+      "instalment": 1000,
+      "payment_type": "Payroll deduction",
+      "latest_status": "0",
+      "clean_24m": true
+    }
+  ],
+  "totals": {
+    "current_balance": 467828,
+    "instalments": 11878
+  },
+  "enquiries": [
+    {
+      "date": "2026-06-29",
+      "subscriber": "Sanlam (SPL BAU)",
+      "type": "Pre-screening",
+      "industry": "Micro loan"
+    },
+    {
+      "date": "2026-06-10",
+      "subscriber": "IEMAS Financial Services",
+      "type": "Credit application"
+    },
+    {
+      "date": "2026-05-06",
+      "subscriber": "Absa Vehicle and Asset Finance",
+      "type": "Credit application"
+    },
+    {
+      "date": "2026-01-02",
+      "subscriber": "Sanlam (SPL BAU)",
+      "type": "Pre-screening",
+      "industry": "Micro loan"
+    },
+    {
+      "date": "2025-10-22",
+      "subscriber": "Example Counsellor",
+      "type": "Informed consent",
+      "own_account": true
+    }
+  ]
+}

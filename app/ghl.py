@@ -1,0 +1,150 @@
+"""HighLevel API client, one instance per sub-account (location). Refreshes tokens automatically."""
+import re
+from datetime import timedelta
+
+import httpx
+
+from . import config, db
+
+
+class GHLError(Exception):
+    pass
+
+
+def exchange_code(code):
+    r = httpx.post(f"{config.GHL_API_BASE}/oauth/token", data={
+        "client_id": config.GHL_CLIENT_ID, "client_secret": config.GHL_CLIENT_SECRET,
+        "grant_type": "authorization_code", "code": code, "user_type": "Location",
+        "redirect_uri": config.GHL_REDIRECT_URI}, timeout=30)
+    if r.status_code >= 400:
+        raise GHLError(f"Token exchange failed: {r.status_code} {r.text[:300]}")
+    return r.json()
+
+
+class GHL:
+    def __init__(self, location_id):
+        self.location_id = location_id
+        self.inst = db.get_install(location_id)
+        if not self.inst or self.inst.get("status") != "active":
+            raise GHLError("App is not installed for this sub-account")
+
+    # ---- auth ----
+    def _token(self):
+        exp = self.inst["expires_at"]
+        if exp is not None and exp.tzinfo is None:
+            exp = exp.replace(tzinfo=db.now().tzinfo)
+        if exp is None or exp <= db.now():
+            r = httpx.post(f"{config.GHL_API_BASE}/oauth/token", data={
+                "client_id": config.GHL_CLIENT_ID, "client_secret": config.GHL_CLIENT_SECRET,
+                "grant_type": "refresh_token", "refresh_token": self.inst["refresh_token"],
+                "user_type": "Location"}, timeout=30)
+            if r.status_code >= 400:
+                raise GHLError(f"Token refresh failed: {r.status_code}")
+            t = r.json()
+            db.save_install(self.location_id, self.inst.get("company_id"), t["access_token"],
+                            t["refresh_token"], t.get("expires_in", 86399))
+            self.inst = db.get_install(self.location_id)
+        return self.inst["access_token"]
+
+    def _h(self):
+        return {"Authorization": f"Bearer {self._token()}", "Version": config.GHL_API_VERSION,
+                "Accept": "application/json"}
+
+    def _req(self, method, path, **kw):
+        r = httpx.request(method, f"{config.GHL_API_BASE}{path}", headers=self._h(), timeout=60, **kw)
+        if r.status_code >= 400:
+            raise GHLError(f"{method} {path} -> {r.status_code} {r.text[:300]}")
+        return r.json() if r.content else {}
+
+    # ---- contacts ----
+    def get_contact(self, contact_id):
+        return self._req("GET", f"/contacts/{contact_id}").get("contact", {})
+
+    def add_note(self, contact_id, body):
+        return self._req("POST", f"/contacts/{contact_id}/notes", json={"body": body})
+
+    def add_task(self, contact_id, title, body, due_days=1):
+        due = (db.now() + timedelta(days=due_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return self._req("POST", f"/contacts/{contact_id}/tasks",
+                         json={"title": title, "body": body, "dueDate": due, "completed": False})
+
+    def add_tag(self, contact_id, tag):
+        return self._req("POST", f"/contacts/{contact_id}/tags", json={"tags": [tag]})
+
+    # ---- files ----
+    def find_report_urls(self, contact, field_id=None):
+        """File-upload custom fields store URLs inside nested objects; collect PDF links."""
+        urls = []
+
+        def walk(v):
+            if isinstance(v, dict):
+                for x in v.values(): walk(x)
+            elif isinstance(v, list):
+                for x in v: walk(x)
+            elif isinstance(v, str) and re.match(r"^https?://", v) and (".pdf" in v.lower() or "files" in v.lower()):
+                urls.append(v)
+        for f in contact.get("customFields", []) or contact.get("customField", []) or []:
+            if field_id and f.get("id") != field_id:
+                continue
+            walk(f.get("value"))
+        return urls
+
+    def download(self, url):
+        for headers in ({"Authorization": f"Bearer {self._token()}"}, {}):
+            r = httpx.get(url, headers=headers, timeout=60, follow_redirects=True)
+            if r.status_code < 400 and r.content[:4] == b"%PDF":
+                return r.content
+        raise GHLError("Could not download the credit report PDF from the contact record")
+
+    def upload_media(self, filename, content):
+        r = httpx.post(f"{config.GHL_API_BASE}/medias/upload-file", headers=self._h(),
+                       files={"file": (filename, content, "application/pdf")},
+                       data={"hosted": "false", "name": filename}, timeout=120)
+        if r.status_code >= 400:
+            raise GHLError(f"Media upload failed: {r.status_code} {r.text[:200]}")
+        j = r.json()
+        return j.get("url") or j.get("fileUrl")
+
+    # ---- messaging ----
+    def send_email(self, contact_id, subject, html, attachment_urls):
+        return self._req("POST", "/conversations/messages", json={
+            "type": "Email", "contactId": contact_id, "subject": subject, "html": html,
+            "attachments": attachment_urls})
+
+
+class FakeGHL:
+    """Stand-in used when MOCK=1, so the service runs without a HighLevel account."""
+    sent = []
+
+    def __init__(self, location_id):
+        self.location_id = location_id
+
+    def get_contact(self, contact_id):
+        return {"id": contact_id, "firstName": "Test", "lastName": f"Client {contact_id[-4:]}",
+                "customFields": [{"id": "cr_file", "value": {"f1": {"url": "https://example.test/files/report.pdf"}}}]}
+
+    def find_report_urls(self, contact, field_id=None):
+        return GHL.find_report_urls(self, contact, field_id)
+
+    def download(self, url):
+        return b"%PDF-1.4 mock"
+
+    def add_note(self, contact_id, body):
+        FakeGHL.sent.append(("note", contact_id, body))
+
+    def add_task(self, contact_id, title, body, due_days=1):
+        FakeGHL.sent.append(("task", contact_id, title))
+
+    def add_tag(self, contact_id, tag):
+        FakeGHL.sent.append(("tag", contact_id, tag))
+
+    def upload_media(self, filename, content):
+        return f"https://example.test/media/{filename}"
+
+    def send_email(self, contact_id, subject, html, attachment_urls):
+        FakeGHL.sent.append(("email", contact_id, subject, attachment_urls))
+        return {"messageId": "mock"}
+
+
+def client_for(location_id):
+    return FakeGHL(location_id) if config.MOCK else GHL(location_id)

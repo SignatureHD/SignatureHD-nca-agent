@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Credit Report Agent</title>
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  body { font-family: Inter, system-ui, sans-serif; }
+  .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+  textarea { field-sizing: content; min-height: 2.5rem; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+<div id="root" class="max-w-6xl mx-auto p-5">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h1 class="text-xl font-bold text-slate-900">Credit Report Agent</h1>
+      <p class="text-sm text-slate-500" id="who">Connecting to your account...</p>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="showSettings()" class="px-3 py-2 text-sm rounded-lg border border-slate-300 bg-white hover:bg-slate-100">Settings</button>
+      <button onclick="loadJobs()" class="px-3 py-2 text-sm rounded-lg border border-slate-300 bg-white hover:bg-slate-100">Refresh</button>
+    </div>
+  </div>
+  <div id="error" class="hidden mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm"></div>
+  <div class="grid grid-cols-12 gap-4">
+    <div class="col-span-4 bg-white rounded-xl border border-slate-200">
+      <div class="px-4 py-3 border-b border-slate-200 text-sm font-semibold">Reports</div>
+      <div id="jobs" class="divide-y divide-slate-100 max-h-[75vh] overflow-auto"><p class="p-4 text-sm text-slate-500">Loading...</p></div>
+    </div>
+    <div class="col-span-8" id="detail">
+      <div class="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500 text-sm">
+        Select a report. New reports appear here when a workflow runs the "Analyse credit report" action on a contact.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="settings" class="hidden fixed inset-0 bg-black/30 flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl p-5 w-full max-w-lg">
+    <h2 class="font-semibold mb-3">Practice settings</h2>
+    <div class="space-y-3 text-sm" id="settingsForm"></div>
+    <div class="flex justify-end gap-2 mt-4">
+      <button onclick="hide('settings')" class="px-3 py-2 rounded-lg border border-slate-300">Cancel</button>
+      <button onclick="saveSettings()" class="px-3 py-2 rounded-lg bg-slate-900 text-white">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const MOCK = {{MOCK}};
+let TOKEN = null, CURRENT = null, DRAFT = null;
+const STATUS = {queued:["Queued","bg-slate-100 text-slate-600"], processing:["Analysing","bg-blue-100 text-blue-700"],
+  review:["Needs review","bg-amber-100 text-amber-800"], sent:["Sent","bg-green-100 text-green-700"],
+  rejected:["Rejected","bg-slate-200 text-slate-600"], failed:["Failed","bg-red-100 text-red-700"]};
+const FIELDS = [["practice_name","Practice name"],["ncr_number","NCR registration number"],["counsellor_name","Approving counsellor"],
+  ["logo_url","Logo URL (https)"],["brand_colour","Brand colour (hex, e.g. #1f3a5f)"],["rubric_approved_by","Readiness rubric signed off by (senior counsellor)"]];
+
+const $ = id => document.getElementById(id);
+const hide = id => $(id).classList.add("hidden");
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function err(m){ const e=$("error"); e.textContent=m; e.classList.toggle("hidden", !m); }
+
+async function api(path, opts={}) {
+  const r = await fetch(path, {...opts, headers: {"Content-Type":"application/json", "Authorization":"Bearer "+TOKEN, ...(opts.headers||{})}});
+  if (!r.ok) { const t = await r.text(); throw new Error(t.slice(0,200) || r.status); }
+  return r.json();
+}
+
+function getUserData() {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("No response from HighLevel. Open this page from the sub-account menu.")), 8000);
+    window.addEventListener("message", function h({data}) {
+      if (data && data.message === "REQUEST_USER_DATA_RESPONSE") { clearTimeout(timer); window.removeEventListener("message", h); resolve(data.payload); }
+    });
+    window.parent.postMessage({message: "REQUEST_USER_DATA"}, "*");
+  });
+}
+
+async function start() {
+  try {
+    const q = new URLSearchParams(location.search);
+    const body = MOCK && q.get("mock_location") ? {mock_location: q.get("mock_location")} : {encryptedData: await getUserData()};
+    const r = await fetch("/api/session", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+    if (!r.ok) throw new Error(await r.text());
+    const s = await r.json(); TOKEN = s.token;
+    $("who").textContent = "Signed in as " + s.user;
+    await loadJobs();
+    if (MOCK && q.get("open") === "first") { const js = await api("/api/jobs"); if (js[0]) openJob(js[js.length-1].id); }
+    setInterval(() => loadJobs(true), 20000);
+  } catch (e) { err(e.message); $("who").textContent = "Not connected"; }
+}
+
+async function loadJobs(quiet) {
+  try {
+    const js = await api("/api/jobs");
+    $("jobs").innerHTML = js.length ? js.map(j => {
+      const [label, cls] = STATUS[j.status] || [j.status, ""];
+      return `<button onclick="openJob('${j.id}')" class="w-full text-left px-4 py-3 hover:bg-slate-50 ${CURRENT===j.id?'bg-slate-50':''}">
+        <div class="flex justify-between items-center"><span class="font-medium text-sm">${esc(j.contact_name || "Contact " + j.contact_id)}</span>
+        <span class="chip ${cls}">${label}</span></div>
+        <div class="text-xs text-slate-500 mt-1">${esc((j.report_type||"").replace(/^./,c=>c.toUpperCase()))} report · ${new Date(j.created_at).toLocaleString("en-ZA")}</div></button>`;
+    }).join("") : `<p class="p-4 text-sm text-slate-500">No reports yet.</p>`;
+  } catch (e) { if (!quiet) err(e.message); }
+}
+
+async function openJob(id) {
+  CURRENT = id; err("");
+  const j = await api("/api/jobs/" + id); DRAFT = j.draft;
+  const t = encodeURIComponent(TOKEN);
+  const warn = (j.warnings||[]).length ? `<div class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm mb-3"><b>Check before approving</b>
+      <ul class="list-disc ml-5 mt-1">${j.warnings.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></div>` : "";
+  const actions = j.status === "review" ? `
+      <div class="flex gap-2"><button onclick="toggleEdit()" class="px-3 py-2 text-sm rounded-lg border border-slate-300 whitespace-nowrap">Edit wording</button>
+      <button onclick="reject()" class="px-3 py-2 text-sm rounded-lg border border-red-300 text-red-700">Reject</button>
+      <button onclick="approve()" class="px-3 py-2 text-sm rounded-lg bg-green-700 text-white whitespace-nowrap">Approve and send</button></div>` : "";
+  $("detail").innerHTML = `<div class="bg-white rounded-xl border border-slate-200 p-4">
+    <div class="flex justify-between items-start mb-3"><div><h2 class="font-semibold">${esc(j.contact_name||"")}</h2>
+      <p class="text-sm text-slate-500">${j.rating && j.rating.total!=null ? `Readiness ${j.rating.total}/100 (${esc(j.rating.band)}) · ${esc(j.rating.rubric_version)}` : esc(j.error||"")}</p></div>${actions}</div>
+    ${warn}<div id="editor" class="hidden mb-3"></div>
+    ${j.status==="failed" ? "" : `<div class="flex gap-2 mb-2 text-sm"><button id="tabReview" onclick="tab('review')" class="px-3 py-1 rounded-md bg-slate-900 text-white">Review sheet (internal)</button>
+      <button id="tabClient" onclick="tab('client')" class="px-3 py-1 rounded-md border border-slate-300">Client PDF</button></div>
+    <iframe id="pdf" class="w-full h-[70vh] rounded-lg border border-slate-200" src="/api/jobs/${id}/pdf/review?t=${t}"></iframe>`}</div>`;
+  loadJobs(true);
+}
+
+function tab(kind) {
+  $("pdf").src = `/api/jobs/${CURRENT}/pdf/${kind}?t=${encodeURIComponent(TOKEN)}&v=${Date.now()}`;
+  $("tabReview").className = "px-3 py-1 rounded-md " + (kind==="review" ? "bg-slate-900 text-white" : "border border-slate-300");
+  $("tabClient").className = "px-3 py-1 rounded-md " + (kind==="client" ? "bg-slate-900 text-white" : "border border-slate-300");
+}
+
+function ta(path, val) { return `<textarea data-path="${path}" class="w-full border border-slate-300 rounded-md p-2 text-sm mb-2">${esc(val)}</textarea>`; }
+function toggleEdit() {
+  const ed = $("editor");
+  if (!ed.classList.contains("hidden")) { ed.classList.add("hidden"); return; }
+  const d = DRAFT; let h = `<div class="p-3 rounded-lg border border-slate-200 bg-slate-50 text-sm"><p class="font-semibold mb-2">Edit client wording</p>`;
+  h += `<label class="text-xs text-slate-500">Short version</label>` + ta("summary", d.summary);
+  d.why.forEach((x,i) => { h += `<label class="text-xs text-slate-500">Why declined ${i+1}</label>` + ta(`why.${i}.title`, x.title) + ta(`why.${i}.body`, x.body); });
+  d.disputes.forEach((x,i) => { h += `<label class="text-xs text-slate-500">Dispute ${i+1}</label>` + ta(`disputes.${i}.item`, x.item) + ta(`disputes.${i}.why`, x.why); });
+  d.fixes.forEach((x,i) => { h += `<label class="text-xs text-slate-500">Fix ${i+1}</label>` + ta(`fixes.${i}.title`, x.title) + ta(`fixes.${i}.body`, x.body); });
+  h += `<label class="text-xs text-slate-500">Rating comment</label>` + ta("rating_comment", d.rating_comment);
+  h += `<button onclick="saveDraft()" class="px-3 py-2 rounded-lg bg-slate-900 text-white">Save and rebuild PDFs</button></div>`;
+  ed.innerHTML = h; ed.classList.remove("hidden");
+}
+
+async function saveDraft() {
+  document.querySelectorAll("#editor textarea").forEach(t => {
+    const p = t.dataset.path.split("."); let o = DRAFT;
+    for (let i=0;i<p.length-1;i++) o = o[p[i]];
+    o[p[p.length-1]] = t.value;
+  });
+  try { await api(`/api/jobs/${CURRENT}/draft`, {method:"POST", body: JSON.stringify({draft: DRAFT})}); await openJob(CURRENT); tab("client"); }
+  catch (e) { err(e.message); }
+}
+
+async function approve() {
+  if (!confirm("Send the client PDF to this client now? You are confirming you have reviewed it.")) return;
+  try { await api(`/api/jobs/${CURRENT}/approve`, {method:"POST"}); await openJob(CURRENT); } catch (e) { err(e.message); }
+}
+async function reject() {
+  const reason = prompt("Reason for rejecting (kept in the audit log):"); if (reason === null) return;
+  try { await api(`/api/jobs/${CURRENT}/reject`, {method:"POST", body: JSON.stringify({reason})}); await openJob(CURRENT); } catch (e) { err(e.message); }
+}
+
+async function showSettings() {
+  const s = await api("/api/settings");
+  $("settingsForm").innerHTML = FIELDS.map(([k,l]) => `<label class="block"><span class="text-slate-600">${l}</span>
+    <input data-k="${k}" value="${esc(s[k]||"")}" class="mt-1 w-full border border-slate-300 rounded-md p-2"></label>`).join("");
+  $("settings").classList.remove("hidden");
+}
+async function saveSettings() {
+  const v = {}; document.querySelectorAll("#settingsForm input").forEach(i => v[i.dataset.k] = i.value);
+  try { await api("/api/settings", {method:"POST", body: JSON.stringify(v)}); hide("settings"); } catch (e) { err(e.message); }
+}
+start();
+</script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+{
+  "report_type": "business",
+  "bureau": "TransUnion",
+  "product": "Business Onfile CV4B (5020)",
+  "ticket_number": "2090665696",
+  "date_requested": "2026-04-22",
+  "requested_by": "Diverse Debt Counsellors",
+  "bureau_contact": {"email": "directsupport@transunion.co.za", "phone": "+27 11 214 6000"},
+  "business": {
+    "name": "DICOLOG (PTY) LTD",
+    "registration_no": "202011425207",
+    "registration_date": "2020-02-27",
+    "status": "In Business",
+    "type": "Private Company",
+    "financial_year_end": "February",
+    "physical_address": "Mon Repos Farm, Sithembile, Glencoe, 2930",
+    "postal_address": "P.O. Box 515, Dundee, 3000",
+    "last_cipc_amendment": "2024-04-16"
+  },
+  "scores": {
+    "commercial_lending": {"score": 910, "band": "C3", "risk": "Low Risk", "band_range": "885-911", "next_band_from": 912},
+    "trade_credit": {"score": 846, "band": "C1", "risk": "Low Risk",
+      "reasons": ["Number of enquiries in past 3 months", "Number of properties purchased", "Age of business"]},
+    "sme_principal": {"score": 712, "band": "C4", "risk": "Medium Risk", "likelihood": "26% to 30% chance of 3+ missed payments on a personal account in the next 12 months",
+      "reasons": ["Number of enquiries reported", "Number of enquiries reported", "Length of time on bureau is too short"]},
+    "trade_delinquency": {"score": 790, "band_likelihood": "less than 11.8%",
+      "reasons": ["Number of enquiries", "Number of properties purchased"]},
+    "judgment_default": {"score": 769, "band_likelihood": "0.8% to 7%",
+      "reasons": ["Number of principals linked to company", "Age of business", "Age of most recent property purchased"]}
+  },
+  "adverse": {
+    "business_judgments": 0,
+    "business_defaults": 0,
+    "principal_judgments": 0,
+    "principal_defaults": 0,
+    "principal_notices": 0,
+    "notarial_bonds": 0
+  },
+  "trade_payment_records": 0,
+  "deeds": 0,
+  "principals": [
+    {"name": "Johannes Fritz George Botes", "position": "Director", "date_started": "2022-03-03",
+     "date_of_birth": "1996-12-15", "contribution_pct": 0.0, "status": "Active", "other_business_links": 0}
+  ],
+  "principal_archive": [
+    {"name": "E Meyer", "position": "Director", "date_started": "2022-03-03", "date_resigned": "2022-10-20"},
+    {"name": "C Gouws", "position": "Director", "date_started": "2020-02-27", "date_resigned": "2022-03-03"}
+  ],
+  "enquiries": [
+    {"date": "2026-04-22", "reason": "Affordability assessment", "subscriber": "TREVOR FRANK ARMF", "note": "the counsellor's own enquiry for this report"},
+    {"date": "2025-01-20", "reason": "Credit Risk", "subscriber": "AFRICAN BANK BUSI"},
+    {"date": "2024-05-17", "reason": "Affordability assessment", "subscriber": "AFRICAN BANK BUSI"}
+  ],
+  "bureau_stated_rules": {
+    "enquiry_retention_nca": "12 months",
+    "enquiry_retention_other": "2 years",
+    "default_retention_nca": "1 year",
+    "judgment_retention": "5 years"
+  }
+}
