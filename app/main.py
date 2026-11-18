@@ -117,8 +117,9 @@ def process_job(jid, loc, contact_id, field_id=None, fixture=None):
         name = " ".join(x for x in (c.get("firstName"), c.get("lastName")) if x) or c.get("name") or contact_id
         urls = g.find_report_urls(c, field_id)
         if not urls:
+            log.warning("no report URL; contact field shape: %s", json.dumps(ghl.GHL.describe_fields(c))[:2000])
             raise ValueError("No credit report PDF found on the contact. Upload it to the credit report file field.")
-        pdf = g.download(urls[-1])
+        pdf = g.download_first(urls)
         st = db.get_settings(loc)
         out = analyse(pdf, st, fixture=fixture)
         db.set_job(jid, status="review", contact_name=name, report_type=out["report_type"],

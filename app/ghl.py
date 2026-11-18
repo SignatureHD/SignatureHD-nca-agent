@@ -130,21 +130,51 @@ class GHL:
 
     # ---- files ----
     def find_report_urls(self, contact, field_id=None):
-        """File-upload custom fields store URLs inside nested objects; collect PDF links."""
-        urls = []
+        """File-upload custom fields store URLs in nested objects (sometimes JSON-encoded strings).
+        Returns every http(s) URL found, PDF-looking ones first; download() checks the bytes."""
+        import json as _json
+        pdfish, other = [], []
 
         def walk(v):
-            if isinstance(v, dict):
+            if isinstance(v, str):
+                t = v.strip()
+                if t[:1] in "[{":
+                    try:
+                        return walk(_json.loads(t))
+                    except ValueError:
+                        pass
+                if re.match(r"^https?://", t):
+                    (pdfish if ".pdf" in t.lower() or "file" in t.lower() or "document" in t.lower() else other).append(t)
+            elif isinstance(v, dict):
                 for x in v.values(): walk(x)
             elif isinstance(v, list):
                 for x in v: walk(x)
-            elif isinstance(v, str) and re.match(r"^https?://", v) and (".pdf" in v.lower() or "files" in v.lower()):
-                urls.append(v)
         for f in contact.get("customFields", []) or contact.get("customField", []) or []:
             if field_id and f.get("id") != field_id:
                 continue
-            walk(f.get("value"))
-        return urls
+            walk(f.get("value", f.get("field_value")))
+        return list(dict.fromkeys(pdfish + other))
+
+    @staticmethod
+    def describe_fields(contact):
+        """Redacted shape of the contact's custom fields, for diagnosing file-field formats."""
+        def shape(v, d=0):
+            if d > 4: return "..."
+            if isinstance(v, dict): return {k: shape(x, d + 1) for k, x in list(v.items())[:8]}
+            if isinstance(v, list): return [shape(x, d + 1) for x in v[:3]]
+            if isinstance(v, str): return ("url:" + v.split("?")[0][:60]) if v.startswith("http") else f"str({len(v)})"
+            return type(v).__name__
+        return [{"id": f.get("id"), "value": shape(f.get("value", f.get("field_value")))}
+                for f in (contact.get("customFields") or contact.get("customField") or [])]
+
+    def download_first(self, urls):
+        last = None
+        for u in urls[:10]:
+            try:
+                return self.download(u)
+            except GHLError as e:
+                last = e
+        raise last or GHLError("Could not download the credit report PDF from the contact record")
 
     def download(self, url):
         for headers in ({"Authorization": f"Bearer {self._token()}"}, {}):
@@ -182,6 +212,9 @@ class FakeGHL:
 
     def find_report_urls(self, contact, field_id=None):
         return GHL.find_report_urls(self, contact, field_id)
+
+    def download_first(self, urls):
+        return self.download(urls[0])
 
     def download(self, url):
         return b"%PDF-1.4 mock"
