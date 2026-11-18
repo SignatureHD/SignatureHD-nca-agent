@@ -16,9 +16,10 @@ Nothing reaches a client without a counsellor's approval.
 
 ## Step 1: Deploy the engine (done 18 November 2026)
 
-- **Railway project:** `nca-agent`, region EU West (Amsterdam). It has two services:
-  - `engine`: built from this repo's `Dockerfile`, and redeploys on every push to `main`
-  - `Postgres`: Railway's own database. `DATABASE_URL` references it
+- **Railway project:** `nca-agent`, region EU West (Amsterdam). The `engine` service is built from this repo's `Dockerfile` and redeploys on every push to `main`. IPv6 outbound is on, because Supabase's direct connection uses IPv6.
+- **Database:** Supabase project `nca-agent` (Frankfurt, eu-central-1).
+  - The app connects as its own limited user `nca_app` and works only in the private schema `nca`. That schema isn't exposed through Supabase's public API.
+  - The tables are `installs`, `settings`, `jobs` and `audit`, and are created automatically.
 - **Public URL:** https://engine-production-92caedb9.up.railway.app (health check at `/health`)
 - **Variables already set:** `DATABASE_URL`, `ACTION_KEY`, `SESSION_SECRET`, `PORT`, `PUBLIC_BASE_URL`, `GHL_REDIRECT_URI`, `CLAUDE_MODEL`, `RETENTION_DAYS`, `MOCK=0`
 - **Still to add in Railway > engine > Variables:**
