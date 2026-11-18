@@ -58,13 +58,14 @@ def draft(report, rules):
     import anthropic
     src_text = "\n\n".join(f"[{i}] {corpus.label(i)} :: {corpus.records()[i]['heading']}\n{corpus.excerpt(i)}" for i in sources)
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY or None)
-    msg = client.messages.create(
-        model=config.CLAUDE_MODEL, max_tokens=8000, system=SYSTEM,
-        tools=[{"name": "write_findings", "description": "Return the draft", "input_schema": SCHEMA}],
-        tool_choice={"type": "tool", "name": "write_findings"},
+    from .llm import call_tool
+    out = call_tool(
+        client, model=config.CLAUDE_MODEL, max_tokens=8000,
+        system=SYSTEM + "\nAlways answer by calling the write_findings tool.",
+        tool={"name": "write_findings", "description": "Return the draft", "input_schema": SCHEMA},
         messages=[{"role": "user", "content":
                    f"REPORT_DATA:\n{json.dumps(report, default=str)}\n\nRULES:\n{json.dumps(rules, default=str)}\n\nSOURCES:\n{src_text}"}])
-    return next(b.input for b in msg.content if b.type == "tool_use"), sources
+    return out, sources
 
 
 def _mock(report, rules, sources):

@@ -86,7 +86,8 @@ def classify(pdf_bytes):
             {"type": "document", "source": {"type": "base64", "media_type": "application/pdf",
                                             "data": base64.b64encode(pdf_bytes).decode()}},
             {"type": "text", "text": "Is this a report on a person (consumer) or on a company (business)? Answer with one word: consumer or business."}]}])
-    return "business" if "business" in msg.content[0].text.lower() else "consumer"
+    text = " ".join(getattr(b, "text", "") for b in msg.content if b.type == "text")
+    return "business" if "business" in text.lower() else "consumer"
 
 
 def extract(pdf_bytes, fixture=None):
@@ -95,15 +96,15 @@ def extract(pdf_bytes, fixture=None):
         return json.load(open(FIXTURES / f"{name}.json", encoding="utf-8"))
     kind = classify(pdf_bytes)
     schema = BUSINESS_SCHEMA if kind == "business" else CONSUMER_SCHEMA
-    msg = _client().messages.create(
-        model=config.CLAUDE_MODEL, max_tokens=16000, system=SYSTEM,
-        tools=[{"name": "record_report", "description": f"Record the {kind} credit report data", "input_schema": schema}],
-        tool_choice={"type": "tool", "name": "record_report"},
+    from .llm import call_tool
+    data = call_tool(
+        _client(), model=config.CLAUDE_MODEL, max_tokens=16000,
+        system=SYSTEM + "\nAlways answer by calling the record_report tool.",
+        tool={"name": "record_report", "description": f"Record the {kind} credit report data", "input_schema": schema},
         messages=[{"role": "user", "content": [
             {"type": "document", "source": {"type": "base64", "media_type": "application/pdf",
                                             "data": base64.b64encode(pdf_bytes).decode()}},
             {"type": "text", "text": f"Extract this {kind} report into the record_report tool. Include every account, "
                                      "every enquiry and the full 24-month payment history for each account."}]}])
-    data = next(b.input for b in msg.content if b.type == "tool_use")
     data["report_type"] = kind
     return data
