@@ -22,6 +22,10 @@ ACTION_KEY = env("ACTION_KEY", "")
 SESSION_SECRET = env("SESSION_SECRET", "dev-only-change-me")
 
 DATABASE_URL = env("DATABASE_URL", "sqlite:///./nca_agent.db")
+# Railway and Supabase give postgres:// or postgresql:// URLs; SQLAlchemy needs the psycopg driver named
+for _p in ("postgres://", "postgresql://"):
+    if DATABASE_URL.startswith(_p):
+        DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len(_p):]
 ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = env("CLAUDE_MODEL", "claude-sonnet-5-5")
 
