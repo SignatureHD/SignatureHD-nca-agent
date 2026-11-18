@@ -39,17 +39,41 @@ def health():
 def oauth_callback(code: str):
     t = ghl.exchange_code(code)
     loc = t.get("locationId")
-    if not loc:
-        raise HTTPException(400, "Install must be done at sub-account level")
-    db.save_install(loc, t.get("companyId"), t["access_token"], t["refresh_token"], t.get("expires_in", 86399))
-    db.log(loc, None, "system", "installed")
-    return "<h3>Credit Report Agent is installed.</h3><p>Open it from the left menu of your sub-account to finish setup.</p>"
+    if loc:
+        db.save_install(loc, t.get("companyId"), t["access_token"], t["refresh_token"], t.get("expires_in", 86399))
+        db.log(loc, None, "system", "installed")
+        return "<h3>Credit Report Agent is installed.</h3><p>Open it from the left menu of your sub-account to finish setup.</p>"
+    company = t.get("companyId")
+    if not company:
+        raise HTTPException(400, "HighLevel did not return a sub-account or agency id")
+    # Agency View install for one or more sub-accounts.
+    ghl.save_company_token(t)
+    done, failed = [], []
+    for lid in ghl.installed_locations(company):
+        try:
+            done.append(ghl.install_location_from_company(company, lid))
+        except Exception as e:  # noqa: BLE001
+            log.warning("location token failed: %s", e)
+            failed.append(lid)
+    msg = f"<h3>Credit Report Agent is installed in {len(done)} sub-account(s).</h3>"
+    if failed:
+        msg += f"<p>{len(failed)} sub-account(s) could not be connected. Please reinstall from those sub-accounts.</p>"
+    return msg + "<p>Open it from the left menu of each sub-account to finish setup.</p>"
 
 
 @app.post("/ghl/webhook")
 async def ghl_webhook(request: Request):
     """App lifecycle events. An UNINSTALL is only acted on once HighLevel confirms the token no longer works."""
     body = await request.json()
+    if body.get("type") == "INSTALL" and body.get("locationId") and body.get("companyId"):
+        loc = body["locationId"]
+        inst = db.get_install(loc)
+        if not inst or inst.get("status") != "active":
+            try:
+                ghl.install_location_from_company(body["companyId"], loc)
+            except Exception as e:  # noqa: BLE001  (no agency token yet: the OAuth callback handles it)
+                log.info("INSTALL webhook for %s not handled: %s", loc, e)
+        return {"ok": True}
     if body.get("type") == "UNINSTALL" and body.get("locationId"):
         loc = body["locationId"]
         try:

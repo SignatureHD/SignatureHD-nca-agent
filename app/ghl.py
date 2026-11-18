@@ -21,6 +21,63 @@ def exchange_code(code):
     return r.json()
 
 
+# ---- agency (bulk) installs ----
+# Installing from Agency View for several sub-accounts returns a Company token with no locationId.
+# We keep that token under a "company:<id>" key and use it to mint a Location token per sub-account.
+def _company_key(company_id):
+    return f"company:{company_id}"
+
+
+def _company_token(company_id):
+    inst = db.get_install(_company_key(company_id))
+    if not inst or inst.get("status") != "active":
+        raise GHLError("No agency token stored for this company")
+    exp = inst["expires_at"]
+    if exp is not None and exp.tzinfo is None:
+        exp = exp.replace(tzinfo=db.now().tzinfo)
+    if exp is None or exp <= db.now():
+        r = httpx.post(f"{config.GHL_API_BASE}/oauth/token", data={
+            "client_id": config.GHL_CLIENT_ID, "client_secret": config.GHL_CLIENT_SECRET,
+            "grant_type": "refresh_token", "refresh_token": inst["refresh_token"],
+            "user_type": "Company"}, timeout=30)
+        if r.status_code >= 400:
+            raise GHLError(f"Agency token refresh failed: {r.status_code}")
+        t = r.json()
+        db.save_install(_company_key(company_id), company_id, t["access_token"], t["refresh_token"],
+                        t.get("expires_in", 86399))
+        return t["access_token"]
+    return inst["access_token"]
+
+
+def save_company_token(t):
+    db.save_install(_company_key(t["companyId"]), t["companyId"], t["access_token"], t["refresh_token"],
+                    t.get("expires_in", 86399))
+
+
+def installed_locations(company_id):
+    app_id = config.GHL_CLIENT_ID.split("-")[0]
+    r = httpx.get(f"{config.GHL_API_BASE}/oauth/installedLocations",
+                  params={"companyId": company_id, "appId": app_id, "isInstalled": "true", "limit": 500},
+                  headers={"Authorization": f"Bearer {_company_token(company_id)}",
+                           "Version": config.GHL_API_VERSION, "Accept": "application/json"}, timeout=30)
+    if r.status_code >= 400:
+        raise GHLError(f"installedLocations failed: {r.status_code} {r.text[:300]}")
+    return [l.get("_id") or l.get("id") for l in r.json().get("locations", []) if l.get("_id") or l.get("id")]
+
+
+def install_location_from_company(company_id, location_id):
+    r = httpx.post(f"{config.GHL_API_BASE}/oauth/locationToken",
+                   data={"companyId": company_id, "locationId": location_id},
+                   headers={"Authorization": f"Bearer {_company_token(company_id)}",
+                            "Version": config.GHL_API_VERSION, "Accept": "application/json"}, timeout=30)
+    if r.status_code >= 400:
+        raise GHLError(f"locationToken failed for {location_id}: {r.status_code} {r.text[:300]}")
+    t = r.json()
+    db.save_install(location_id, company_id, t["access_token"], t["refresh_token"], t.get("expires_in", 86399))
+    db.log(location_id, None, "system", "installed", "via agency install")
+    return location_id
+
+
 class GHL:
     def __init__(self, location_id):
         self.location_id = location_id
