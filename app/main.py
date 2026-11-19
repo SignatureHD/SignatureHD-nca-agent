@@ -185,8 +185,13 @@ def job(jid: str, s=Depends(current)):
     if not j:
         raise HTTPException(404)
     res = json.loads(j["result"] or "{}")
+    review = None
+    if res.get("rules") and j["extracted"]:
+        report = json.loads(j["extracted"])
+        review = {"meta": render.review_meta(report, res["rules"]),
+                  "cards": render.review_cards(report, res["rules"], res.get("draft"))}
     return {"id": j["id"], "status": j["status"], "contact_name": j["contact_name"], "report_type": j["report_type"],
-            "error": j["error"], "draft": res.get("draft"), "warnings": res.get("warnings"),
+            "error": j["error"], "draft": res.get("draft"), "warnings": res.get("warnings"), "review": review,
             "rating": {k: res.get("rules", {}).get(k) for k in ("total", "band", "rubric_version")}}
 
 
@@ -196,7 +201,15 @@ def job_pdf(jid: str, kind: str, s=Depends(current)):
     if not j or kind not in ("client", "review") or not j[f"{kind}_pdf"]:
         raise HTTPException(404)
     db.log(s["loc"], jid, s["user"], f"viewed_{kind}_pdf")
-    return Response(j[f"{kind}_pdf"], media_type="application/pdf",
+    body = j[f"{kind}_pdf"]
+    if kind == "review" and j["extracted"] and j["result"]:
+        try:  # always show the review sheet in the current layout
+            res = json.loads(j["result"])
+            body = render.review_pdf(json.loads(j["extracted"]), res["rules"], res.get("draft") or {},
+                                     res.get("warnings") or [], res.get("sources") or [], db.get_settings(s["loc"]))
+        except Exception:  # noqa: BLE001
+            log.exception("review re-render failed")
+    return Response(body, media_type="application/pdf",
                     headers={"Content-Disposition": f"inline; filename={kind}.pdf", "Cache-Control": "no-store"})
 
 

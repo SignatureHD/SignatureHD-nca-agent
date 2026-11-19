@@ -9,6 +9,20 @@
   body { font-family: Inter, system-ui, sans-serif; }
   .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
   textarea { field-sizing: content; min-height: 2.5rem; }
+  /* Review sheet on screen: same look as the PDF */
+  .rs { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:28px 32px; color:#1e293b; }
+  .rs-banner { background:#fdf6e3; border:1px solid #f0d58c; color:#7a5a00; font-weight:600; font-size:12px; padding:8px 12px; border-radius:6px; margin-bottom:18px; }
+  .rs-kicker { color:#1f3a5f; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+  .rs h1 { color:#1f3a5f; font-size:30px; font-weight:800; margin:4px 0 6px; line-height:1.15; }
+  .rs-meta { color:#64748b; font-size:13px; padding-bottom:14px; border-bottom:3px solid #1f3a5f; margin-bottom:16px; }
+  .rs-intro { color:#475569; font-size:14px; margin-bottom:14px; }
+  .rs-card { border:1px solid #e2e8f0; border-radius:8px; padding:14px 16px; margin-bottom:10px; }
+  .rs-card h4 { font-weight:700; font-size:15px; margin-bottom:4px; color:#0f172a; }
+  .rs-card p { font-size:14px; line-height:1.55; }
+  .rs-card .basis { font-size:11.5px; color:#7a8494; margin-top:6px; }
+  .tabbtn { padding:8px 14px; border-radius:8px; font-size:14px; font-weight:600; border:1px solid #cbd5e1; background:#fff; }
+  .tabbtn.on { background:#0f172a; color:#fff; border-color:#0f172a; }
+  .linkbtn { font-size:13px; color:#1d4ed8; text-decoration:underline; }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-800">
@@ -50,7 +64,7 @@
 
 <script>
 const MOCK = {{MOCK}};
-let TOKEN = null, CURRENT = null, DRAFT = null;
+let TOKEN = null, CURRENT = null, DRAFT = null, JOB = null;
 const STATUS = {queued:["Queued","bg-slate-100 text-slate-600"], processing:["Analysing","bg-blue-100 text-blue-700"],
   review:["Needs review","bg-amber-100 text-amber-800"], sent:["Sent","bg-green-100 text-green-700"],
   rejected:["Rejected","bg-slate-200 text-slate-600"], failed:["Failed","bg-red-100 text-red-700"]};
@@ -107,32 +121,51 @@ async function loadJobs(quiet) {
 
 async function openJob(id) {
   CURRENT = id; err("");
-  const j = await api("/api/jobs/" + id); DRAFT = j.draft;
-  const t = encodeURIComponent(TOKEN);
-  const all = j.warnings||[], doubtP = "Extraction doubt:";
-  const checks = all.filter(w=>!w.startsWith(doubtP)), doubts = all.filter(w=>w.startsWith(doubtP)).map(w=>w.slice(doubtP.length).trim());
-  const warn = (checks.length ? `<div class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm mb-3"><b>Check before approving</b>
-      <ul class="list-disc ml-5 mt-1">${checks.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></div>` : "")
-    + (doubts.length ? `<details class="p-3 rounded-lg bg-slate-50 border border-slate-200 text-sm mb-3"><summary class="cursor-pointer"><b>How the report was read</b> (${doubts.length} notes)</summary>
-      <ul class="list-disc ml-5 mt-1">${doubts.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></details>` : "");
+  const j = await api("/api/jobs/" + id); DRAFT = j.draft; JOB = j;
   const actions = j.status === "review" ? `
       <div class="flex gap-2"><button onclick="toggleEdit()" class="px-3 py-2 text-sm rounded-lg border border-slate-300 whitespace-nowrap">Edit wording</button>
       <button onclick="reject()" class="px-3 py-2 text-sm rounded-lg border border-red-300 text-red-700">Reject</button>
       <button onclick="approve()" class="px-3 py-2 text-sm rounded-lg bg-green-700 text-white whitespace-nowrap">Approve and send</button></div>` : "";
-  $("detail").innerHTML = `<div class="bg-white rounded-xl border border-slate-200 p-4">
-    <div class="flex justify-between items-start mb-3"><div><h2 class="font-semibold">${esc(j.contact_name||"")}</h2>
-      <p class="text-sm text-slate-500">${j.rating && j.rating.total!=null ? `Readiness ${j.rating.total}/100 (${esc(j.rating.band)}) · ${esc(j.rating.rubric_version)}` : esc(j.error||"")}</p></div>${actions}</div>
-    ${warn}<div id="editor" class="hidden mb-3"></div>
-    ${j.status==="failed" ? "" : `<div class="flex gap-2 mb-2 text-sm"><button id="tabReview" onclick="tab('review')" class="px-3 py-1 rounded-md bg-slate-900 text-white">Review sheet (internal)</button>
-      <button id="tabClient" onclick="tab('client')" class="px-3 py-1 rounded-md border border-slate-300">Client PDF</button></div>
-    <iframe id="pdf" class="w-full h-[70vh] rounded-lg border border-slate-200" src="/api/jobs/${id}/pdf/review?t=${t}"></iframe>`}</div>`;
+  const status = {review:"Waiting for your review", sent:"Approved and sent to the client", rejected:"Rejected", failed:"Failed", processing:"Being analysed", queued:"Queued"}[j.status] || j.status;
+  $("detail").innerHTML = `<div class="bg-white rounded-xl border border-slate-200 p-4 mb-3">
+    <div class="flex justify-between items-start"><div><h2 class="font-semibold">${esc(j.contact_name||"")}</h2>
+      <p class="text-sm text-slate-500">${esc(status)}${j.rating && j.rating.total!=null ? ` · Readiness ${j.rating.total}/100 (${esc(j.rating.band)})` : ""}</p>
+      ${j.status==="failed" ? `<p class="text-sm text-red-700 mt-1">${esc(j.error||"")}</p>` : ""}</div>${actions}</div>
+    <div id="editor" class="hidden mt-3"></div></div>
+    ${j.status==="failed" || !j.review ? "" : `<div class="flex gap-2 mb-3">
+      <button id="tabReview" onclick="tab('review')" class="tabbtn on">Counsellor review notes</button>
+      <button id="tabClient" onclick="tab('client')" class="tabbtn">Client's Findings and Action Plan</button></div>
+    <div id="pane"></div>`}`;
+  if (j.review) tab("review");
   loadJobs(true);
 }
 
+function reviewHtml(j) {
+  const all = j.warnings||[], doubtP = "Extraction doubt:";
+  const checks = all.filter(w=>!w.startsWith(doubtP)), doubts = all.filter(w=>w.startsWith(doubtP)).map(w=>w.slice(doubtP.length).trim());
+  const cards = j.review.cards.map(c => `<div class="rs-card"><h4>${esc(c.title)}</h4><p>${esc(c.body)}</p>${c.basis ? `<p class="basis">Legal basis: ${esc(c.basis)}</p>` : ""}</div>`).join("");
+  const t = encodeURIComponent(TOKEN);
+  return `<div class="rs"><div class="rs-banner">INTERNAL. Counsellor review sheet. Not for the client.</div>
+    <div class="rs-kicker">Counsellor review notes</div><h1>${esc(j.contact_name||"")}</h1>
+    <div class="rs-meta">${esc(j.review.meta)}</div>
+    <p class="rs-intro">These items were raised by the automatic checks and need a counsellor's judgement before the client PDF is approved.</p>
+    ${cards}
+    ${checks.length ? `<div class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm mt-4"><b>Check before approving</b>
+      <ul class="list-disc ml-5 mt-1">${checks.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}
+    ${doubts.length ? `<details class="p-3 rounded-lg bg-slate-50 border border-slate-200 text-sm mt-3"><summary class="cursor-pointer"><b>How the report was read</b> (${doubts.length} notes)</summary>
+      <ul class="list-disc ml-5 mt-1">${doubts.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></details>` : ""}
+    <p class="mt-4"><a class="linkbtn" target="_blank" href="/api/jobs/${CURRENT}/pdf/review?t=${t}">Download the review sheet as a PDF</a></p></div>`;
+}
+
 function tab(kind) {
-  $("pdf").src = `/api/jobs/${CURRENT}/pdf/${kind}?t=${encodeURIComponent(TOKEN)}&v=${Date.now()}`;
-  $("tabReview").className = "px-3 py-1 rounded-md " + (kind==="review" ? "bg-slate-900 text-white" : "border border-slate-300");
-  $("tabClient").className = "px-3 py-1 rounded-md " + (kind==="client" ? "bg-slate-900 text-white" : "border border-slate-300");
+  const t = encodeURIComponent(TOKEN);
+  $("tabReview").className = "tabbtn" + (kind==="review" ? " on" : "");
+  $("tabClient").className = "tabbtn" + (kind==="client" ? " on" : "");
+  $("pane").innerHTML = kind === "review" ? reviewHtml(JOB) :
+    `<div class="bg-white rounded-xl border border-slate-200 p-3">
+      <p class="text-sm text-slate-600 mb-2">This is exactly what the client will receive when you click Approve and send.
+      <a class="linkbtn ml-1" target="_blank" href="/api/jobs/${CURRENT}/pdf/client?t=${t}">Open full size</a></p>
+      <iframe class="w-full rounded-lg border border-slate-200" style="height:85vh" src="/api/jobs/${CURRENT}/pdf/client?t=${t}&v=${Date.now()}#zoom=page-width"></iframe></div>`;
 }
 
 function ta(path, val) { return `<textarea data-path="${path}" class="w-full border border-slate-300 rounded-md p-2 text-sm mb-2">${esc(val)}</textarea>`; }

@@ -102,10 +102,45 @@ def _flag_cards(flags):
     out = []
     for fid, fs in groups.items():
         title = FLAG_TITLES.get(fid, fid.replace("_", " ").capitalize())
-        body = " ".join(dict.fromkeys(x.get("detail", "") for x in fs))
+        details = list(dict.fromkeys(x.get("detail", "") for x in fs))
+        accts = [x.get("acct") for x in fs if x.get("acct")]
+        body = " ".join(details) + (f" Accounts: {', '.join(dict.fromkeys(accts))}." if accts else "")
         cites = list(dict.fromkeys(c for x in fs for c in x.get("sources", [])))[:3]
         out.append({"title": title, "body": body, "cites": cites})
     return out
+
+
+DATA_HANDLING = {"title": "Data handling", "cites": [], "body":
+    "ID and account numbers are masked in the client PDF. Keep this report under the client's POPIA consent, "
+    "and delete the working copies once the file is closed."}
+
+
+def review_cards(report, rules, d):
+    """The judgement cards shown on the review sheet and on screen."""
+    notes = (d or {}).get("counsellor_notes") or _flag_cards(rules.get("flags", []))
+    merged = {}
+    for x in notes:  # one card per title: repeated issues are listed together
+        key = (x.get("title") or "").strip().lower()
+        if key in merged:
+            m = merged[key]
+            if x.get("body") and x["body"] not in m["body"]:
+                m["body"] = (m["body"] + " " + x["body"]).strip()
+            m["cites"] = list(dict.fromkeys((m.get("cites") or []) + (x.get("cites") or [])))
+        else:
+            merged[key] = {"title": x.get("title") or "", "body": x.get("body") or "", "cites": list(x.get("cites") or [])}
+    notes = list(merged.values())
+    return [{**x, "basis": "; ".join(corpus.label(c) for c in (x.get("cites") or []))} for x in notes] + [{**DATA_HANDLING, "basis": ""}]
+
+
+def review_meta(report, rules):
+    score_txt = ""
+    for k, v in (report.get("scores") or {}).items():
+        if isinstance(v, dict) and v.get("score"):
+            score_txt = f"{k.replace('_', ' ').upper()} score {v['score']}"
+            break
+    parts = [f"{report.get('bureau') or ''} ticket {report.get('ticket_number') or ''}".strip(), score_txt,
+             f"Readiness {rules['total']}/100 ({rules['band']})"]
+    return " · ".join(p for p in parts if p)
 
 
 def review_pdf(report, rules, d, warnings, sources, st):
@@ -113,26 +148,17 @@ def review_pdf(report, rules, d, warnings, sources, st):
     name = subject_name(report)
     footer = f"INTERNAL review sheet. Based on {report.get('bureau', '')} report {report.get('ticket_number', '')}, dated {report.get('date_requested', '')}."
     checks, doubts = split_warnings(warnings)
-    notes = d.get("counsellor_notes") or _flag_cards(rules.get("flags", []))
-    notes = list(notes) + [{"title": "Data handling", "cites": [], "body":
-        "ID and account numbers are masked in the client PDF. Keep this report under the client's POPIA consent, "
-        "and delete the working copies once the file is closed."}]
-    cards = "".join(f"<div class='card'><h4>{e(x['title'])}</h4><p>{e(x['body'])}</p>{_basis(x.get('cites'))}</div>" for x in notes)
+    cards = "".join(f"<div class='card'><h4>{e(x['title'])}</h4><p>{e(x['body'])}</p>{_basis(x.get('cites'))}</div>"
+                    for x in review_cards(report, rules, d))
     check_html = ("<div class='warn'><b>Check before approving</b><ul>" + "".join(f"<li>{e(w)}</li>" for w in checks) + "</ul></div>") if checks else ""
     doubt_html = ("<h4 style='margin-top:14px'>How the report was read</h4><p class='intro'>Points the reader was unsure about. "
                   "Check them against the original report if they affect your advice.</p><ul class='small'>"
                   + "".join(f"<li>{e(w[:400])}</li>" for w in doubts[:8]) + "</ul>") if doubts else ""
-    score = (report.get("scores") or {})
-    score_txt = ""
-    for k, v in score.items():
-        if isinstance(v, dict) and v.get("score"):
-            score_txt = f" · {e(k.replace('_', ' ').upper())} score {e(v['score'])}"
-            break
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{_css(footer, brand)}
     ul.small li {{ font-size: 8.6pt; margin-bottom: 3px; }}</style></head><body>
     <div class="draft">INTERNAL. Counsellor review sheet. Not for the client.</div>
     <div class="hero"><div class="kicker">Counsellor review notes</div><h1>{e(name)}</h1>
-    <div class="meta">{e(report.get('bureau'))} ticket {e(report.get('ticket_number'))}{score_txt} · Readiness {rules['total']}/100 ({rules['band']})</div></div>
+    <div class="meta">{e(review_meta(report, rules))}</div></div>
     <p class="intro">These items were raised by the automatic checks and need a counsellor's judgement before the client PDF is approved.</p>
     {cards}{check_html}{doubt_html}
     </body></html>"""
