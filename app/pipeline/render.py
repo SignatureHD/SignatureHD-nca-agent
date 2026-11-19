@@ -29,8 +29,31 @@ def _css(footer, brand):
     h1, h2, .kicker, .col h4 {{ color: {brand}; }} h2 .sn {{ background: {brand}; }}
     .warn {{ background:#fdf0ee; border:1px solid #f2c4bb; border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:9pt; }}
     .warn li {{ margin-bottom:2px; }}
+    .col .who {{ font-size:8pt; color:#64748b; margin:0 0 4px; text-transform:uppercase; letter-spacing:.04em; }}
+    ol.steps {{ margin:0; padding-left:16px; }} ol.steps li {{ margin-bottom:4px; }}
+    .cta {{ margin-top:16px; border:2px solid {brand}; border-radius:10px; padding:14px 16px; page-break-inside:avoid; }}
+    .cta .k {{ font-size:8pt; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:{brand}; }}
+    .cta h3 {{ margin:2px 0 6px; font-size:14pt; color:{brand}; }}
+    .cta .btn {{ display:inline-block; background:{brand}; color:#fff; text-decoration:none; font-weight:700; padding:8px 14px; border-radius:6px; margin:6px 0; }}
+    .cta ul {{ margin:4px 0 0; padding-left:16px; }} .cta .contact {{ margin-top:6px; }}
     """
     return CSS.replace("{{FOOTER}}", footer.replace('"', "'")) + extra
+
+
+def next_step_html(st):
+    """The single call to action that closes the client PDF."""
+    who = st.get("counsellor_name") or st.get("practice_name") or "your debt counsellor"
+    url = st.get("booking_url") or ""
+    contact = " · ".join(x for x in (st.get("contact_phone"), st.get("contact_email")) if x)
+    action = (f"<a class='btn' href='{e(url)}'>Book your review</a><br><span class='muted'>{e(url)}</span>" if url
+              else "<p><b>Reply to the email this plan came with, or call us, to book your review.</b></p>")
+    return f"""<div class="cta"><div class="k">Your next step</div>
+    <h3>Book your free review with {e(who)}</h3>
+    <p>In this session we go through your findings, check your budget and agree the steps for days 31 to 90.</p>
+    {action}
+    <p class="label" style="margin-top:8px">Please bring</p><ul><li>Your latest 3 payslips</li><li>3 months' bank statements</li>
+    <li>A list of your monthly expenses</li><li>The reference numbers of any disputes you have lodged</li></ul>
+    {f"<p class='contact'>{e(contact)}</p>" if contact else ""}</div>"""
 
 
 def subject_name(report):
@@ -40,7 +63,7 @@ def subject_name(report):
 def client_pdf(report, rules, d, st):
     brand = st.get("brand_colour") or "#1f3a5f"
     name = subject_name(report)
-    practice = st.get("practice_name") or report.get("requested_by") or "Your debt counsellor"
+    practice = st.get("practice_name") or "your debt counsellor"
     ncr = f" · NCR {e(st['ncr_number'])}" if st.get("ncr_number") else ""
     footer = f"Based on {report.get('bureau', '')} report {report.get('ticket_number', '')}, dated {report.get('date_requested', '')}. Not a guarantee of credit."
     pct, band = rules["total"], rules["band"]
@@ -56,8 +79,11 @@ def client_pdf(report, rules, d, st):
                     for x in d["fixes"])
     rubric = "".join(f"<tr><td>{e(n)}</td><td class='num'>{g}</td><td class='num muted'>/ {m}</td></tr>" for n, g, m in rules["rubric"])
     bands = "".join(f"<div class='band {'on' if lo <= pct <= hi else ''}'><b>{n}</b><span>{lo} to {hi}</span></div>" for n, lo, hi in BANDS)
-    plan = "".join(f"<div class='col'><h4>{t}</h4><ul>{''.join(f'<li>{e(s)}</li>' for s in d['plan'][k])}</ul></div>"
-                   for t, k in (("Days 1 to 30", "d30"), ("Days 31 to 60", "d60"), ("Days 61 to 90", "d90")))
+    plan = "".join(f"<div class='col'><h4>{t}</h4><p class='who'>{w}</p><ol class='steps'>{''.join(f'<li>{e(s)}</li>' for s in d['plan'][k])}</ol></div>"
+                   for t, k, w in (("Days 1 to 30", "d30", "What you can do now"),
+                                   ("Days 31 to 60", "d60", "With your counsellor"),
+                                   ("Days 61 to 90", "d90", "With your counsellor")))
+    cta = next_step_html(st)
     col = BAND_COLOUR[band]
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>{_css(footer, brand)}
     .band.on {{ background:{col}; }} .bandname {{ color:{col}; }}</style></head><body>
@@ -73,7 +99,9 @@ def client_pdf(report, rules, d, st):
     <h2><span class="sn">4</span> Finance readiness rating and plan</h2>
     <div class="rating"><div class="big">{pct}<small> / 100</small></div><div><div class="bandname">{band}</div><div>{e(d['rating_comment'])}</div></div></div>
     <div class="bands">{bands}</div><table>{rubric}</table>
-    <h4 style="margin:14px 0 8px">Your 30, 60 and 90 day plan</h4><div class="cols">{plan}</div>
+    <h4 style="margin:14px 0 4px">Your 30, 60 and 90 day action plan</h4>
+    <p class="intro">Start with the first column this week. Your counsellor will take you through the rest.</p><div class="cols">{plan}</div>
+    {cta}
     <div class="note">This report explains your credit information and suggests next steps. It is not legal advice and not a guarantee that any lender will approve credit. Prepared by {e(practice)} and approved by your debt counsellor.</div>
     </body></html>"""
     return HTML(string=html).write_pdf()

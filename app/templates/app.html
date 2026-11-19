@@ -69,7 +69,8 @@ const STATUS = {queued:["Queued","bg-slate-100 text-slate-600"], processing:["An
   review:["Needs review","bg-amber-100 text-amber-800"], sent:["Sent","bg-green-100 text-green-700"],
   rejected:["Rejected","bg-slate-200 text-slate-600"], failed:["Failed","bg-red-100 text-red-700"]};
 const FIELDS = [["practice_name","Practice name"],["ncr_number","NCR registration number"],["counsellor_name","Approving counsellor"],
-  ["logo_url","Logo URL (https)"],["brand_colour","Brand colour (hex, e.g. #1f3a5f)"],["rubric_approved_by","Readiness rubric signed off by (senior counsellor)"]];
+  ["logo_url","Logo URL (https)"],["brand_colour","Brand colour (hex, e.g. #1f3a5f)"],["rubric_approved_by","Readiness rubric signed off by (senior counsellor)"],
+  ["booking_url","Booking link for the free review (https)"],["contact_phone","Phone or WhatsApp number"],["contact_email","Contact email"]];
 
 const $ = id => document.getElementById(id);
 const hide = id => $(id).classList.add("hidden");

@@ -19,7 +19,12 @@ SCHEMA = {"type": "object", "required": ["summary", "why", "disputes", "fixes", 
             "steps": {"type": "array", "items": {"type": "string"}}, "cites": {"type": "array", "items": {"type": "string"}}}}},
         "fixes": {"type": "array", "minItems": 2, "maxItems": 5, "items": _item},
         "plan": {"type": "object", "required": ["d30", "d60", "d90"], "properties": {
-            k: {"type": "array", "items": {"type": "string"}} for k in ("d30", "d60", "d90")}},
+            "d30": {"type": "array", "minItems": 3, "maxItems": 5, "items": {"type": "string"},
+                    "description": "Days 1-30: specific actions the client can take now, naming the accounts and bureau (disputes to lodge, stop applying for credit, documents to gather)"},
+            "d60": {"type": "array", "minItems": 2, "maxItems": 4, "items": {"type": "string"},
+                    "description": "Days 31-60: follow-ups and the steps done with the counsellor (check dispute outcomes after 20 business days, budget and affordability assessment)"},
+            "d90": {"type": "array", "minItems": 2, "maxItems": 4, "items": {"type": "string"},
+                    "description": "Days 61-90: review progress with the counsellor, pull a fresh report, decide on next options"}}},
         "rating_comment": {"type": "string", "description": "One sentence explaining the rating"},
         "counsellor_notes": {"type": "array", "minItems": 2, "items": _item,
                              "description": "One card per issue needing the counsellor's judgement. Group repeated flags of the same kind into one card"}}}
@@ -36,6 +41,7 @@ Hard rules:
 - Only list a dispute when the report gives a real basis. If a dispute depends on facts not in the report, say what must be confirmed first.
 - Internal-only flags (marked internal) go in counsellor_notes, never in client text.
 - Counsellor notes: one short card per issue that needs the counsellor's judgement (group repeated flags of the same kind, naming the accounts). Each card: a short title, then 2-4 sentences saying what to check, which section applies and what documents to request. Every RULES flag must be covered by a card.
+- The 30/60/90 day plan is the action plan: each step starts with a verb and is specific to this report (name the account or bureau where relevant). Days 1-30 are things the client can do now; days 31-90 are done with the counsellor.
 - Fill every section: 3-4 "why" items, every real dispute, 2-5 "fixes", all three plan periods, and the counsellor notes.
 - Never include a full ID or account number."""
 
@@ -93,7 +99,11 @@ def _missing(d, rules):
     out = []
     if n("why") < 3: out.append("fewer than 3 'why' items")
     if n("fixes") < 2: out.append("fewer than 2 'fixes'")
-    if n("plan") < 3: out.append("plan periods missing")
+    plan = d.get("plan") if isinstance(d, dict) and isinstance(d.get("plan"), dict) else {}
+    for k, lo in (("d30", 3), ("d60", 2), ("d90", 2)):
+        v = plan.get(k)
+        if not isinstance(v, list) or len([x for x in v if str(x).strip()]) < lo:
+            out.append(f"plan {k} has fewer than {lo} actions")
     if rules.get("flags") and n("counsellor_notes") < 2: out.append("counsellor_notes missing although RULES has flags")
     return out
 

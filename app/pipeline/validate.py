@@ -66,7 +66,18 @@ def normalise(d):
                              "cites": [str(c) for c in _as_list(it.get("cites"))]})
     d["disputes"] = disputes
     plan = d.get("plan") if isinstance(d.get("plan"), dict) else {}
-    d["plan"] = {k: [str(x) for x in _as_list(plan.get(k))] for k in ("d30", "d60", "d90")}
+    d["plan"] = {k: [str(x) for x in _as_list(plan.get(k)) if str(x).strip()] for k in ("d30", "d60", "d90")}
+    defaults = {
+        "d30": (["Lodge the free disputes listed in section 2 with the credit bureau, attaching the evidence."] if disputes else [])
+               + ["Stop applying for new credit, including store cards.",
+                  "Gather your latest 3 payslips, 3 months' bank statements and a list of your monthly expenses."],
+        "d60": ["Check the dispute outcomes: the bureau must answer within 20 business days.",
+                "Go through your budget and affordability with your counsellor."],
+        "d90": ["Review your progress with your counsellor and pull a fresh credit report.",
+                "Agree the next options for your debt with your counsellor."]}
+    for k, v in defaults.items():
+        if not d["plan"][k]:
+            d["plan"][k] = v
     for k in ("summary", "rating_comment"):
         d[k] = d.get(k) if isinstance(d.get(k), str) else ("" if d.get(k) is None else str(d.get(k)))
     return d

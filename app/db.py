@@ -23,7 +23,10 @@ settings = Table("settings", md,
     Column("practice_name", String(200)), Column("ncr_number", String(64)),
     Column("counsellor_name", String(200)), Column("logo_url", Text),
     Column("brand_colour", String(16)), Column("rubric_approved_by", String(200)),
-    Column("send_channel", String(16), default="Email"))
+    Column("send_channel", String(16), default="Email"),
+    Column("booking_url", Text), Column("contact_phone", String(64)), Column("contact_email", String(200)))
+
+NEW_SETTINGS_COLUMNS = {"booking_url": "TEXT", "contact_phone": "VARCHAR(64)", "contact_email": "VARCHAR(200)"}
 
 jobs = Table("jobs", md,
     Column("id", String(36), primary_key=True),
@@ -49,6 +52,14 @@ def now():
 
 def init():
     md.create_all(engine)
+    # add settings columns introduced after the first deploy
+    from sqlalchemy import inspect, text
+    have = {c["name"] for c in inspect(engine).get_columns("settings", schema=settings.schema)}
+    name = f"{settings.schema}.settings" if settings.schema else "settings"
+    with engine.begin() as c:
+        for col, typ in NEW_SETTINGS_COLUMNS.items():
+            if col not in have:
+                c.execute(text(f"ALTER TABLE {name} ADD COLUMN {col} {typ}"))
 
 
 def log(location_id, job_id, actor, action, detail=""):
