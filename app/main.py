@@ -144,7 +144,7 @@ def process_job(jid, loc, contact_id, field_id=None, fixture=None):
 @app.get("/app", response_class=HTMLResponse)
 def custom_page():
     return HTMLResponse(APP_HTML.replace("{{MOCK}}", "true" if config.MOCK else "false"),
-                        headers={"Content-Security-Policy": "frame-ancestors *"})
+                        headers={"Content-Security-Policy": "frame-ancestors *", "Cache-Control": "no-store"})
 
 
 @app.post("/api/session")

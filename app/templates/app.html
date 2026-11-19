@@ -34,7 +34,8 @@
     </div>
     <div class="flex gap-2">
       <button onclick="showSettings()" class="px-3 py-2 text-sm rounded-lg border border-slate-300 bg-white hover:bg-slate-100">Settings</button>
-      <button onclick="loadJobs()" class="px-3 py-2 text-sm rounded-lg border border-slate-300 bg-white hover:bg-slate-100">Refresh</button>
+      <span id="updated" class="text-xs text-slate-400 self-center"></span>
+      <button onclick="refreshAll()" class="px-3 py-2 text-sm rounded-lg border border-slate-300 bg-white hover:bg-slate-100">Refresh</button>
     </div>
   </div>
   <div id="error" class="hidden mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm"></div>
@@ -105,6 +106,13 @@ async function start() {
     if (MOCK && q.get("open") === "first") { const js = await api("/api/jobs"); if (js[0]) openJob(js[js.length-1].id); }
     setInterval(() => loadJobs(true), 20000);
   } catch (e) { err(e.message); $("who").textContent = "Not connected"; }
+}
+
+async function refreshAll() {
+  $("updated").textContent = "Refreshing...";
+  await loadJobs();
+  if (CURRENT) { try { await openJob(CURRENT); } catch (e) { err(e.message); } }
+  $("updated").textContent = "Updated " + new Date().toLocaleTimeString("en-ZA", {hour: "2-digit", minute: "2-digit"});
 }
 
 async function loadJobs(quiet) {
