@@ -25,6 +25,15 @@ async def lifespan(_app):
     yield
 
 app = FastAPI(title="Credit Report Agent", docs_url=None, redoc_url=None, lifespan=lifespan)
+class _KbStatic(StaticFiles):
+    """Public knowledge-base files, readable by the HighLevel app (for imports)."""
+    async def get_response(self, path, scope):
+        resp = await super().get_response(path, scope)
+        resp.headers["Access-Control-Allow-Origin"] = "https://app.gohighlevel.com"
+        return resp
+
+
+app.mount("/static/kb", _KbStatic(directory=Path(__file__).resolve().parent / "static" / "kb"), name="kb")
 app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 APP_HTML = (Path(__file__).resolve().parent / "templates" / "app.html").read_text(encoding="utf-8")
 
