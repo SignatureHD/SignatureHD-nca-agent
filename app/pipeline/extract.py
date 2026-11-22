@@ -31,6 +31,7 @@ CONSUMER_SCHEMA = {
             "supplier": {"type": "string"}, "type": {"type": "string"}, "industry": {"type": "string", "description": "Use 'Debt recovery' for collection / debt purchase industries"},
             "acc_last4": {"type": "string", "description": "Last 4 characters of the account number only"},
             "opened": {"type": "string", "description": "YYYY-MM-DD"},
+            "last_payment": {"type": "string", "description": "Date of last payment YYYY-MM-DD, if printed"},
             "opening_balance": {"type": "integer"}, "limit": {"type": "integer", "description": "Credit limit for revolving accounts, if shown or clearly implied"},
             "current_balance": {"type": "integer"}, "overdue": {"type": "integer"}, "instalment": {"type": "integer"},
             "term_months": {"type": "integer"}, "revolving": {"type": "boolean"}, "payment_type": {"type": "string"},

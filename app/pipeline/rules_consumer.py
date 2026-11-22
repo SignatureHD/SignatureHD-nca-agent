@@ -28,10 +28,21 @@ def run(r):
                           "detail": f"Balance R{a['current_balance']:,} against opening balance R{a['opening_balance']:,}",
                           "sources": ["NCA-s103", "NCA-s101"]})
     for a in accts:
-        if a.get("opened") and months(d(a["opened"]), asof) > 36 and (a.get("overdue") or a.get("industry") == "Debt recovery"):
-            flags.append({"id": "prescription_check", "acct": a["supplier"],
-                          "detail": "Account older than 3 years with arrears or in debt recovery",
-                          "sources": ["NCA-s126B", "REG2015-r19", "NCRG-005-2025-A6.1"]})
+        unpaid = a.get("overdue") or a.get("industry") == "Debt recovery"
+        lp = a.get("last_payment")
+        if lp and unpaid:
+            gap = months(d(lp), asof)
+            if gap >= 36:
+                detail = (f"Last payment {lp}, {gap // 12} years {gap % 12} months before the report: likely prescribed "
+                          "unless the debt was acknowledged in writing or a summons was served")
+            else:
+                detail = f"Last payment {lp}, under 3 years before the report: not prescribed yet"
+        elif a.get("opened") and months(d(a["opened"]), asof) > 36 and unpaid:
+            detail = "Account older than 3 years with arrears or in debt recovery, and no last payment date on the report"
+        else:
+            continue
+        flags.append({"id": "prescription_check", "acct": a["supplier"], "detail": detail,
+                      "sources": ["NCA-s126B", "REG2015-r19", "NCRG-005-2025-A6.1"]})
     for a in accts:
         if str(a.get("latest_status", "")).startswith("B") and "150+" in hist(a).values():
             flags.append({"id": "closed_after_adverse", "acct": a["supplier"],

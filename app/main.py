@@ -10,7 +10,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Re
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import config, db, ghl, security
+from . import config, db, email_html, ghl, security
 from .pipeline import render, validate
 from .pipeline.run import analyse
 
@@ -239,13 +239,8 @@ async def approve(jid: str, s=Depends(current)):
     g = ghl.client_for(s["loc"])
     fname = f"Findings-and-Action-Plan-{(j['contact_name'] or 'client').replace(' ', '-')}.pdf"
     url = g.upload_media(fname, j["client_pdf"])
-    practice = st.get("practice_name") or "your debt counsellor"
-    book = (f"<p><b>Your next step:</b> <a href=\"{st['booking_url']}\">book your free review</a> so we can go through it with you.</p>"
-            if st.get("booking_url") else "<p><b>Your next step:</b> reply to this email to book your free review so we can go through it with you.</p>")
-    g.send_email(j["contact_id"], "Your credit report findings and action plan",
-                 f"<p>Hi {(j['contact_name'] or '').split(' ')[0]},</p><p>Attached is your Findings and Action Plan, "
-                 f"based on your credit report. Start with the steps for days 1 to 30.</p>{book}<p>Kind regards,<br>{practice}</p>",
-                 [url])
+    first = (j["contact_name"] or "").split(" ")[0]
+    g.send_email(j["contact_id"], "Your Findings and Action Plan is ready", email_html.plan_email(first, st), [url])
     g.add_note(j["contact_id"], f"Findings and Action Plan approved by {s['user']} and sent to the client.")
     g.add_tag(j["contact_id"], "credit-report-sent")
     db.set_job(jid, status="sent", approved_by=s["user"], purge_after=db.now() + timedelta(days=config.RETENTION_DAYS))

@@ -102,7 +102,7 @@ def client_pdf(report, rules, d, st):
     <h4 style="margin:14px 0 4px">Your 30, 60 and 90 day action plan</h4>
     <p class="intro">Start with the first column this week. Your counsellor will take you through the rest.</p><div class="cols">{plan}</div>
     {cta}
-    <div class="note">This report explains your credit information and suggests next steps. It is not legal advice and not a guarantee that any lender will approve credit. Prepared by {e(practice)} and approved by your debt counsellor.</div>
+    <div class="note">This report explains your credit information and suggests next steps. It is not legal advice and not a guarantee that any lender will approve credit. Prepared by {e(practice)} and checked by a professional before it was sent to you.</div>
     </body></html>"""
     return HTML(string=html).write_pdf()
 
